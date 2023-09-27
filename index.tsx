@@ -1,57 +1,47 @@
 import { Hono } from "hono";
 import { renderToString } from "react-dom/server";
+import { createTodoService } from "./model";
+import { Todo, Todos, CreateTodoForm, UpdateTodoForm } from "./view";
 
-const todos = [
-  {
-    title: "learn bun",
-    done: false,
-  },
-];
+const todoService = createTodoService();
 
 const app = new Hono();
 app.get("/", (c) => c.html(base(renderToString(<Home />))));
-app.get("/todos", (c) => c.html(renderToString(<Todos todos={todos} />)));
+app.get("/todos", (c) =>
+  c.html(renderToString(<Todos todos={todoService.todos} />))
+);
+app.get("/todos/:id", (c) => {
+  const id = Number(c.req.param("id"));
+  const todo = todoService.find(id);
+  return c.html(renderToString(<UpdateTodoForm todo={todo} />));
+});
+app.patch("/todos/:id", async (c) => {
+  const id = Number(c.req.param("id"));
+  const { title } = await c.req.json();
+  todoService.update({ id, title });
+
+  const todo = todoService.find(id);
+  return c.html(renderToString(<Todo todo={todo} />));
+});
 app.post("/todos", async (c) => {
-  const todo = await c.req.json();
-  todos.push(todo);
-  return c.html(renderToString(<Todos todos={todos} />));
+  const { title } = await c.req.json();
+  todoService.add(title);
+  return c.html(renderToString(<Todos todos={todoService.todos} />));
+});
+app.delete("/todos/:id", async (c) => {
+  const id = c.req.param("id");
+  todoService.delete(id);
+  return c.html("");
 });
 
 function Home() {
   return (
     <div>
-      <h1>Hello World</h1>
-      <form
-        hx-post="/todos"
-        hx-target="#todos"
-        hx-ext="json-enc" // converts the form to JSON based on input name, e.g. {"title": "..."}
-        _="on submit target.reset()" // resets the input field
-      >
-        <label htmlFor="todo"> Bun Todo </label>
-        <input
-          id="todo"
-          name="title"
-          type="text"
-          aria-label="create todo"
-          placeholder="New todo"
-        />
-        <button type="submit">Add Todo</button>
-      </form>
+      <h1>My Todos</h1>
+      <CreateTodoForm />
 
       <section id="todos" hx-get="/todos" hx-trigger="load"></section>
     </div>
-  );
-}
-
-function Todos({ todos }) {
-  return todos.length ? (
-    <ul>
-      {todos.map((todo) => (
-        <li key={todo.title}>{todo.title}</li>
-      ))}
-    </ul>
-  ) : (
-    "No todos found"
   );
 }
 
@@ -78,7 +68,9 @@ function base(component) {
     />
   </head>
   <body>
-    ${component}
+    <main class='container'>
+        ${component}
+    </main>
   </body>
 </html>
 `;
